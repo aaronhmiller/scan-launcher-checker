@@ -9,9 +9,7 @@ interface CancelScanInput {
 
 interface GraphQLRequest {
   operationName: string;
-  variables: {
-    cancelScanInput: CancelScanInput;
-  };
+  variables?: any;
   query: string;
 }
 
@@ -24,7 +22,10 @@ interface CancelScanResult {
 
 interface GraphQLResponse {
   data: {
-    cancelScan: CancelScanResult;
+    cancelScan?: CancelScanResult;
+    checkScanInProgress?: {
+      isInProgress: boolean;
+    };
   };
 }
 
@@ -35,14 +36,54 @@ const env = await load({ export: true });
 const GRAPHQL_ENDPOINT = Deno.env.get("GRAPHQL_ENDPOINT") || "https://api.cloud.ox.security/api/apollo-gateway"; //from env or use default
 const API_KEY = Deno.env.get("API_KEY");
 
+// Function to check if a scan is in progress
+async function checkScanInProgress(): Promise<boolean> {
+  // Construct the GraphQL request
+  const request: GraphQLRequest = {
+    operationName: "CheckScanInProgress",
+    query: `query CheckScanInProgress {
+      checkScanInProgress {
+        isInProgress
+      }
+    }`
+  };
+
+  try {
+    // Send the GraphQL request
+    const response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": API_KEY
+      },
+      body: JSON.stringify(request)
+    });
+
+    // Parse the response
+    const responseData = await response.json() as GraphQLResponse;
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    if (!responseData.data || !responseData.data.checkScanInProgress) {
+      throw new Error("Invalid response format from GraphQL endpoint");
+    }
+    
+    return responseData.data.checkScanInProgress.isInProgress;
+  } catch (error) {
+    console.error("Error checking if scan is in progress:", error);
+    throw error;
+  }
+}
+
 // Function to prompt user for scanId
 async function promptForScanId(): Promise<string> {
   console.log("Please enter the scanId to cancel:");
-  
   for await (const line of readLines(Deno.stdin)) {
     return line.trim();
   }
-  
   throw new Error("Failed to read input");
 }
 
@@ -57,13 +98,13 @@ async function cancelScan(scanId: string): Promise<CancelScanResult> {
       }
     },
     query: `mutation CancelScan($cancelScanInput: CancelScanInput) {
-  cancelScan(cancelScanInput: $cancelScanInput) {
-    isCanceled
-    error
-    scanId
-    previousScanId
-  }
-}`
+      cancelScan(cancelScanInput: $cancelScanInput) {
+        isCanceled
+        error
+        scanId
+        previousScanId
+      }
+    }`
   };
 
   try {
@@ -101,9 +142,19 @@ async function main() {
   try {
     console.log("=== Scan Cancellation Tool ===");
     
+    // First, check if a scan is in progress
+    console.log("Checking if a scan is currently in progress...");
+    const isInProgress = await checkScanInProgress();
+    
+    if (!isInProgress) {
+      console.log("ℹ️ No scan is currently in progress. Nothing to cancel.");
+      Deno.exit(0);
+    }
+    
+    console.log("✅ A scan is currently in progress. Proceeding with cancellation.");
+    
     // Prompt for scanId
     const scanId = await promptForScanId();
-    
     console.log(`Attempting to cancel scan with ID: ${scanId}`);
     
     // Execute the cancel scan mutation
