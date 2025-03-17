@@ -17,12 +17,59 @@ interface GetScannedAppsResponse {
   };
 }
 
+interface CheckScanInProgressResponse {
+  data: {
+    checkScanInProgress: {
+      isInProgress: boolean;
+    };
+  };
+}
+
 // Load environment variables from .env file
 const env = await load({ export: true });
 
 // GraphQL endpoint and API key from environment variables (or default)
 const GRAPHQL_ENDPOINT = Deno.env.get("GRAPHQL_ENDPOINT") || "https://api.cloud.ox.security/api/apollo-gateway"; //from env or use default
 const API_KEY = Deno.env.get("API_KEY");
+
+// Function to check if a scan is currently in progress
+async function checkScanInProgress(): Promise<boolean> {
+  const query = `
+    query CheckScanInProgress {
+      checkScanInProgress {
+        isInProgress
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": API_KEY,
+      },
+      body: JSON.stringify({
+        query: query,
+        variables: {},
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data: CheckScanInProgressResponse = await response.json();
+    const isInProgress = data.data?.checkScanInProgress?.isInProgress;
+    
+    console.log(`Scan in progress check: ${isInProgress ? "A scan is currently running" : "No scan currently running"}`);
+    return isInProgress;
+  } catch (error) {
+    console.error(`Error checking if scan is in progress: ${error}`);
+    // If we can't determine if a scan is in progress, return true as a safety measure
+    return true;
+  }
+}
 
 // Function to initiate a scan and get a scanID
 async function initiateScanning(): Promise<string> {
@@ -167,10 +214,18 @@ async function pollUntilScanComplete(
 // Updated main function to handle the more detailed status response
 async function main() {
   try {
-    // Step 1: Initiate scan and get scanID
+    // Step 1: Check if a scan is already in progress
+    const scanInProgress = await checkScanInProgress();
+    
+    if (scanInProgress) {
+      console.log("Cannot start a new scan because a scan is already in progress.");
+      return;
+    }
+    
+    // Step 2: Initiate scan and get scanID
     const scanID = await initiateScanning();
     
-    // Step 2: Poll until scan is complete or a definitive state is reached
+    // Step 3: Poll until scan is complete or a definitive state is reached
     const result = await pollUntilScanComplete(scanID);
     
     if (result.success) {
