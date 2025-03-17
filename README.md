@@ -3,7 +3,7 @@ Start an OX Scan and check its status. Includes a cancel scan utility to facilit
 
 ## Usage
 
-To a .env file, add an OX API Key. The other values are defaulted, but should you need to override them
+To a .env file, add an [OX API Key](https://docs.ox.security/api-documentation/api-reference/ox-api-authentication). The other values are defaulted, but should you need to override them
 the settings keys are:
 
 ```
