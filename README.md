@@ -7,6 +7,8 @@ To a .env file, add an [OX API Key](https://docs.ox.security/api-documentation/a
 the keys are:
 
 ```
+# Sample contents of .env file
+
 # GraphQL API Configuration
 GRAPHQL_ENDPOINT=https://api.cloud.ox.security/api/apollo-gateway
 API_KEY=<YOUR_API_KEY_HERE>
